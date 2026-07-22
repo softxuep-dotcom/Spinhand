@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#171424" />
+    <title>Spinhand · P0</title>
+  </head>
+  <body>
+    <main id="app" aria-label="Spinhand P0 物理沙盘">
+      <div id="game-shell">
+        <canvas id="game-canvas" aria-label="动力轮物理沙盘"></canvas>
+        <div id="hud" aria-live="polite">
+          <div class="top-row">
+            <button id="reset-button" class="icon-button" type="button" aria-label="重置沙盘">↻</button>
+            <div class="prototype-chip">
+              <span>P0 · 物理沙盘</span>
+              <strong id="contact-status">轮缘空转</strong>
+            </div>
+            <button id="debug-button" class="icon-button" type="button" aria-label="切换调试面板">⌁</button>
+          </div>
+          <div id="input-hint" class="input-hint">
+            <span class="hint-wheel" aria-hidden="true"></span>
+            <span>按住并拖动，轮心会停在触点上方</span>
+          </div>
+          <section id="debug-panel" class="debug-panel" aria-label="物理调试" hidden>
+            <div class="debug-head">
+              <strong>轮缘诊断</strong>
+              <span id="debug-metrics">等待接触</span>
+            </div>
+            <div class="debug-actions">
+              <button id="record-button" type="button">录制</button>
+              <button id="stop-button" type="button">停止</button>
+              <button id="play-button" type="button">回放</button>
+              <button id="repeat-button" type="button">一致性 ×100</button>
+              <button id="export-button" type="button">导出</button>
+            </div>
+            <div id="replay-status">D：调试 · R：重置</div>
+          </section>
+        </div>
+        <div id="loading" role="status">
+          <span class="loading-wheel" aria-hidden="true"></span>
+          <span>装配动力轮…</span>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
