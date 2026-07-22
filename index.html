@@ -44,6 +44,17 @@
           </div>
         </div>
 
+        <section id="debug-panel" class="debug-panel" aria-label="物理调试面板" hidden>
+          <div class="debug-heading"><strong>PHYSICS DEBUG</strong><span id="debug-metrics">等待模拟</span></div>
+          <div id="debug-state" class="debug-state">—</div>
+          <div class="debug-actions">
+            <button id="debug-prev-button" type="button">← 上一关</button>
+            <button id="debug-reset-button" type="button">重置</button>
+            <button id="debug-next-button" type="button">下一关 →</button>
+          </div>
+          <small>?debug=1 · 按 D 隐藏</small>
+        </section>
+
         <section id="pause-panel" class="overlay pause-panel" aria-label="暂停菜单" hidden>
           <div class="panel-card compact-card">
             <span class="eyebrow">动力轮已抬起</span>

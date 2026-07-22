@@ -72,7 +72,7 @@ export class CampaignSimulation {
       );
       this.world.createCollider(
         RAPIER.ColliderDesc.cuboid(platform.halfExtents.x, platform.halfExtents.y)
-          .setFriction(0.82)
+          .setFriction(platform.friction ?? 0.82)
           .setRestitution(0.08),
         body,
       );
@@ -92,7 +92,7 @@ export class CampaignSimulation {
         this.world.createCollider(
           RAPIER.ColliderDesc.ball(radius)
             .setDensity(level.object.density ?? 1)
-            .setFriction(0.68)
+            .setFriction(level.id === 1 ? 0.16 : 0.68)
             .setRestitution(level.id === 1 ? 0.04 : 0.36),
           this.objectBody,
         );
@@ -238,6 +238,8 @@ export class CampaignSimulation {
             }),
           );
           if (impulse > 0) {
+            // Keep the force at the real rim contact. Level 1 uses a polished,
+            // low-friction rail and teaches the player to maintain contact.
             this.objectBody.applyImpulseAtPoint(scale(tangent, impulse), hit.point, true);
             feedback.impulse = impulse;
             remaining -= impulse;

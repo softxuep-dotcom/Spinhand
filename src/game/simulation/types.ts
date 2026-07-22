@@ -22,6 +22,8 @@ export interface PlatformState {
   position: Vec2;
   halfExtents: Vec2;
   rotation: number;
+  friction?: number;
+  surface?: "standard" | "slick";
 }
 
 export interface SimulationRenderState {

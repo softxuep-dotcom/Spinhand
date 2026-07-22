@@ -55,12 +55,12 @@ describe("chapter one campaign", () => {
     drag(
       simulation,
       { x: before.position.x - 0.75, y: before.position.y - 1.28 },
-      { x: before.position.x + 1.65, y: before.position.y - 1.28 },
-      48,
+      { x: before.position.x + 4.4, y: before.position.y - 1.28 },
+      100,
     );
-    idle(simulation, 100);
+    idle(simulation, 45);
     const after = simulation.getRenderState().object!;
-    expect(after.position.x).toBeGreaterThan(before.position.x + 0.5);
+    expect(after.position.x).toBeGreaterThan(before.position.x + 2.6);
     expect(simulation.getRenderState().completed).toBe(true);
   });
 

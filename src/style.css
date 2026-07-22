@@ -78,6 +78,41 @@ button { -webkit-tap-highlight-color: transparent; }
   pointer-events: none;
 }
 
+.debug-panel {
+  position: absolute;
+  z-index: 9;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid rgba(97, 228, 255, .42);
+  border-radius: 12px;
+  background: rgba(7, 11, 19, .9);
+  box-shadow: 0 12px 36px rgba(0,0,0,.36);
+  color: #dce8f2;
+  font: 10px/1.35 ui-monospace, "SFMono-Regular", Consolas, monospace;
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+}
+
+.debug-panel[hidden] { display: none; }
+.debug-heading { display: flex; justify-content: space-between; gap: 8px; color: #61e4ff; }
+.debug-heading span { color: #aeb9c8; text-align: right; }
+.debug-state { min-height: 14px; color: #ffdc67; white-space: nowrap; }
+.debug-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.debug-actions button {
+  min-height: 30px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 8px;
+  background: rgba(255,255,255,.07);
+  color: #eef4fa;
+  cursor: pointer;
+}
+.debug-actions button:disabled { opacity: .32; cursor: default; }
+.debug-panel small { color: #758194; }
+
 .top-row {
   position: absolute;
   top: max(12px, env(safe-area-inset-top));

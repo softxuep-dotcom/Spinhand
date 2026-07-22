@@ -36,6 +36,9 @@ const levelGrid = required<HTMLDivElement>("level-grid");
 const soundToggle = required<HTMLInputElement>("sound-toggle");
 const hapticsToggle = required<HTMLInputElement>("haptics-toggle");
 const motionToggle = required<HTMLInputElement>("motion-toggle");
+const debugPanel = required<HTMLElement>("debug-panel");
+const debugMetrics = required<HTMLElement>("debug-metrics");
+const debugState = required<HTMLElement>("debug-state");
 
 const save = new CampaignSave();
 const audio = new MotorAudio();
@@ -52,6 +55,13 @@ let restartCount = 0;
 let hintDismissed = false;
 let failureTimer: number | undefined;
 let levelsFromChapter = false;
+let debugVisible = new URLSearchParams(window.location.search).get("debug") === "1";
+
+const setDebugVisible = (visible: boolean): void => {
+  debugVisible = visible;
+  debugPanel.hidden = !visible;
+  renderer.setDebugVisible(visible);
+};
 
 const applySettings = (): void => {
   const settings = save.data.settings;
@@ -91,7 +101,7 @@ const updateLevelHud = (): void => {
   objectiveVerb.textContent = level.verb;
   objectiveName.textContent = level.name;
   hintCopy.textContent = currentLevel === 1
-    ? "手指放在黄轮下方 · 按住向右拖"
+    ? "黄轮贴住球底 · 缓慢向右推到杯中"
     : `按住拖动 · ${level.hint}`;
   inputHint.classList.remove("is-hidden");
   firstLevelDemo.classList.toggle("is-hidden", currentLevel !== 1);
@@ -189,7 +199,7 @@ const updateHud = (): void => {
     contactStatus.textContent = "寻找轮缘";
     contactStatus.dataset.state = "active";
   } else {
-    contactStatus.textContent = "轮缘空转";
+    contactStatus.textContent = currentLevel === 1 ? "保持贴住 · 缓慢向右" : "轮缘空转";
     contactStatus.dataset.state = "idle";
   }
   if (currentLevel === 5 && state.phase > 0 && !state.completed) {
@@ -197,6 +207,13 @@ const updateHud = (): void => {
     hintCopy.textContent = "下轮缘向左 · 扫入高处杯中";
   }
   const impulse = state.contacts.reduce((sum, item) => sum + item.impulse, 0);
+  if (debugVisible) {
+    const stats = renderer.getRenderStats();
+    debugMetrics.textContent = `L${currentLevel} · J ${impulse.toFixed(3)} · ${stats.calls} calls / ${stats.triangles} tris`;
+    debugState.textContent = state.object
+      ? `p ${state.object.position.x.toFixed(2)}, ${state.object.position.y.toFixed(2)} · v ${state.object.linearVelocity.x.toFixed(2)}, ${state.object.linearVelocity.y.toFixed(2)} · ω ${state.object.angularVelocity.toFixed(2)}`
+      : `机构 y ${state.mechanism?.position.y.toFixed(2) ?? "—"} · 进度 ${Math.round((state.mechanism?.progress ?? 0) * 100)}%`;
+  }
   audio.update(state.wheel.active && !paused, impulse, Boolean(contact?.invalidDeep));
   if (state.completed) handleCompletion();
   if (state.failed) handleFailure();
@@ -221,6 +238,9 @@ required<HTMLButtonElement>("replay-chapter-button").addEventListener("click", (
   chapterPanel.hidden = true;
   startLevel(1, false);
 });
+required<HTMLButtonElement>("debug-prev-button").addEventListener("click", () => startLevel(currentLevel - 1, false));
+required<HTMLButtonElement>("debug-reset-button").addEventListener("click", () => startLevel(currentLevel, true));
+required<HTMLButtonElement>("debug-next-button").addEventListener("click", () => startLevel(currentLevel + 1, false));
 
 soundToggle.addEventListener("change", () => {
   save.setSetting("sound", soundToggle.checked);
@@ -237,6 +257,7 @@ motionToggle.addEventListener("change", () => {
 
 window.addEventListener("keydown", (event) => {
   if (event.repeat) return;
+  if (event.key.toLowerCase() === "d") setDebugVisible(!debugVisible);
   if (event.key.toLowerCase() === "r") startLevel(currentLevel, true);
   if (event.key === "Escape" || event.key.toLowerCase() === "p") {
     if (!chapterPanel.hidden || !levelsPanel.hidden) return;
@@ -253,6 +274,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 applySettings();
+setDebugVisible(debugVisible);
 updateLevelHud();
 buildLevelGrid();
 loading.classList.add("is-hidden");

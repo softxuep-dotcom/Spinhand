@@ -10,12 +10,17 @@ interface Spark {
   life: number;
 }
 
+const zVector = (point: Vec2, z = 2.32): THREE.Vector3 => new THREE.Vector3(point.x, point.y, z);
+
 export class CampaignRenderer {
   readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly content = new THREE.Group();
   private readonly camera = new THREE.OrthographicCamera(-4.5, 4.5, 8, -8, 0.1, 50);
   private readonly wheel = this.createWheel();
+  private readonly sweepLine: THREE.Line;
+  private readonly tangentArrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 1, 0xffd34e);
+  private readonly normalArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 0.65, 0x53d9ff);
   private readonly sparks: Spark[] = [];
   private object?: THREE.Group;
   private mechanism?: THREE.Group;
@@ -26,6 +31,7 @@ export class CampaignRenderer {
   private elapsed = 0;
   private lastSparkAt = 0;
   private loadedLevel = 0;
+  private debugVisible = false;
 
   constructor(private readonly canvas: HTMLCanvasElement, initial: CampaignRenderState) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
@@ -38,6 +44,13 @@ export class CampaignRenderer {
     this.camera.position.set(0, 0, 20);
 
     this.scene.add(this.content);
+    this.sweepLine = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+      new THREE.LineDashedMaterial({ color: 0x61e4ff, dashSize: 0.12, gapSize: 0.08, transparent: true, opacity: 0.9 }),
+    );
+    this.sweepLine.computeLineDistances();
+    this.scene.add(this.sweepLine, this.tangentArrow, this.normalArrow);
+    this.setDebugVisible(false);
     this.createLights();
     this.loadLevel(initial);
     window.addEventListener("resize", this.resize);
@@ -55,6 +68,13 @@ export class CampaignRenderer {
       y: THREE.MathUtils.lerp(this.camera.bottom, this.camera.top, (y + 1) * 0.5),
     };
   };
+
+  setDebugVisible(visible: boolean): void {
+    this.debugVisible = visible;
+    this.sweepLine.visible = visible;
+    this.tangentArrow.visible = false;
+    this.normalArrow.visible = false;
+  }
 
   loadLevel(state: CampaignRenderState): void {
     while (this.content.children.length > 0) {
@@ -126,8 +146,16 @@ export class CampaignRenderer {
 
     const active = state.contacts.find((contact) => !contact.invalidDeep && contact.impulse > 0)
       ?? state.contacts.find((contact) => contact.invalidDeep);
+    this.updateDebug(state, active);
     this.updateSparks(active, delta, state.completed);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  getRenderStats(): { calls: number; triangles: number } {
+    return {
+      calls: this.renderer.info.render.calls,
+      triangles: this.renderer.info.render.triangles,
+    };
   }
 
   dispose(): void {
@@ -186,14 +214,33 @@ export class CampaignRenderer {
 
   private createPlatforms(state: CampaignRenderState): void {
     const material = new THREE.MeshStandardMaterial({ color: 0x697086, roughness: 0.52, metalness: 0.42 });
+    const slickMaterial = new THREE.MeshStandardMaterial({
+      color: 0x507b91,
+      emissive: 0x16566f,
+      emissiveIntensity: 0.42,
+      roughness: 0.12,
+      metalness: 0.78,
+    });
     const edge = new THREE.MeshStandardMaterial({ color: state.level.accent, emissive: state.level.accent, emissiveIntensity: 0.22, roughness: 0.38 });
     for (const platform of state.platforms) {
       const group = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(platform.halfExtents.x * 2, platform.halfExtents.y * 2, 0.7), material);
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(platform.halfExtents.x * 2, platform.halfExtents.y * 2, 0.7),
+        platform.surface === "slick" ? slickMaterial : material,
+      );
       body.castShadow = true;
       body.receiveShadow = true;
       const lip = new THREE.Mesh(new THREE.BoxGeometry(platform.halfExtents.x * 2, 0.045, 0.74), edge);
       lip.position.y = platform.halfExtents.y + 0.025;
+      if (platform.surface === "slick") {
+        lip.scale.y = 1.8;
+        lip.material = new THREE.MeshStandardMaterial({
+          color: 0x61e4ff,
+          emissive: 0x1a8aa8,
+          emissiveIntensity: 0.85,
+          roughness: 0.16,
+        });
+      }
       group.add(body, lip);
       group.position.set(platform.position.x, platform.position.y, 0);
       group.rotation.z = platform.rotation;
@@ -318,6 +365,28 @@ export class CampaignRenderer {
     );
     group.add(ring);
     return group;
+  }
+
+  private updateDebug(state: CampaignRenderState, contact?: ContactFeedback): void {
+    const positions = this.sweepLine.geometry.getAttribute("position");
+    positions.setXYZ(0, state.wheel.previousPosition.x, state.wheel.previousPosition.y, 2.28);
+    positions.setXYZ(1, state.wheel.position.x, state.wheel.position.y, 2.28);
+    positions.needsUpdate = true;
+    this.sweepLine.computeLineDistances();
+
+    const showContact = this.debugVisible && Boolean(contact);
+    this.tangentArrow.visible = showContact;
+    this.normalArrow.visible = showContact;
+    if (!contact) return;
+
+    const origin = zVector(contact.point);
+    this.tangentArrow.position.copy(origin);
+    this.tangentArrow.setDirection(new THREE.Vector3(contact.tangent.x, contact.tangent.y, 0));
+    this.tangentArrow.setLength(0.55 + contact.impulse * 2.1, 0.13, 0.08);
+    this.tangentArrow.setColor(new THREE.Color(contact.invalidDeep ? 0xff5252 : 0xffd34e));
+    this.normalArrow.position.copy(origin);
+    this.normalArrow.setDirection(new THREE.Vector3(contact.normal.x, contact.normal.y, 0));
+    this.normalArrow.setLength(0.52, 0.12, 0.07);
   }
 
   private updateSparks(contact: ContactFeedback | undefined, delta: number, completed: boolean): void {
