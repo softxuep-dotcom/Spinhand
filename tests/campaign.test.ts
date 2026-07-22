@@ -34,6 +34,20 @@ const drag = (
 beforeAll(async () => RAPIER.init());
 
 describe("chapter one campaign", () => {
+  it("parks the idle wheel on the rim each level teaches", () => {
+    const first = new CampaignSimulation(getCampaignLevel(1)).getRenderState();
+    expect(first.wheel.position.y).toBeLessThan(first.object!.position.y);
+
+    const second = new CampaignSimulation(getCampaignLevel(2)).getRenderState();
+    expect(second.wheel.position.y).toBeGreaterThan(second.object!.position.y);
+
+    const lift = new CampaignSimulation(getCampaignLevel(3)).getRenderState();
+    expect(lift.wheel.position.x).toBeGreaterThan(lift.mechanism!.position.x);
+
+    const press = new CampaignSimulation(getCampaignLevel(4)).getRenderState();
+    expect(press.wheel.position.x).toBeLessThan(press.mechanism!.position.x);
+  });
+
   it("level 1 sends the ball toward the right cup", () => {
     const simulation = new CampaignSimulation(getCampaignLevel(1));
     idle(simulation);

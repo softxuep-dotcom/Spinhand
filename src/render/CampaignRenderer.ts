@@ -222,7 +222,9 @@ export class CampaignRenderer {
       group.add(spoke);
     }
     group.add(rim, hub);
-    group.traverse((object) => { if (object instanceof THREE.Mesh) object.castShadow = true; });
+    // A wheel-shaped shadow reads as a second controllable wheel in the flat
+    // playfield, so the power wheel deliberately does not cast one.
+    group.traverse((object) => { if (object instanceof THREE.Mesh) object.castShadow = false; });
     return group;
   }
 

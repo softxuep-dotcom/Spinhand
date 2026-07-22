@@ -27,6 +27,7 @@ const objectiveVerb = required<HTMLElement>("objective-verb");
 const objectiveName = required<HTMLElement>("objective-name");
 const inputHint = required<HTMLElement>("input-hint");
 const hintCopy = required<HTMLElement>("hint-copy");
+const firstLevelDemo = required<HTMLElement>("first-level-demo");
 const contactStatus = required<HTMLElement>("contact-status");
 const resultToast = required<HTMLElement>("result-toast");
 const resultBolts = required<HTMLElement>("result-bolts");
@@ -89,8 +90,11 @@ const updateLevelHud = (): void => {
   levelProgress.textContent = `${currentLevel} / 5`;
   objectiveVerb.textContent = level.verb;
   objectiveName.textContent = level.name;
-  hintCopy.textContent = `按住拖动 · ${level.hint}`;
+  hintCopy.textContent = currentLevel === 1
+    ? "手指放在黄轮下方 · 按住向右拖"
+    : `按住拖动 · ${level.hint}`;
   inputHint.classList.remove("is-hidden");
+  firstLevelDemo.classList.toggle("is-hidden", currentLevel !== 1);
   hintDismissed = false;
 };
 
@@ -179,6 +183,7 @@ const updateHud = (): void => {
     if (!hintDismissed) {
       hintDismissed = true;
       inputHint.classList.add("is-hidden");
+      firstLevelDemo.classList.add("is-hidden");
     }
   } else if (state.wheel.active) {
     contactStatus.textContent = "寻找轮缘";

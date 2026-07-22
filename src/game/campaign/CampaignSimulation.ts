@@ -29,8 +29,8 @@ export class CampaignSimulation {
   private readonly objectBody?: RAPIER.RigidBody;
   private readonly objectShape?: ContactShape;
   private contacts: ContactFeedback[] = [];
-  private wheelPosition: Vec2 = { x: 0, y: 5.2 };
-  private previousWheelPosition: Vec2 = { ...this.wheelPosition };
+  private wheelPosition: Vec2;
+  private previousWheelPosition: Vec2;
   private wheelActive = false;
   private hadContact = false;
   private mechanismY = 0;
@@ -42,6 +42,25 @@ export class CampaignSimulation {
   private failed = false;
 
   constructor(readonly level: CampaignLevel) {
+    const object = level.object;
+    const mechanism = level.mechanism;
+    if (object) {
+      const extent = object.kind === "ball" ? object.radius ?? 0.56 : object.halfExtents?.y ?? 0.64;
+      const above = level.id === 2;
+      this.wheelPosition = {
+        x: object.start.x + (above ? 0.18 : -0.18),
+        y: object.start.y + (above ? extent + WHEEL_RADIUS : -extent - WHEEL_RADIUS),
+      };
+    } else if (mechanism) {
+      const toRight = mechanism.kind === "bolt";
+      this.wheelPosition = {
+        x: mechanism.start.x + (toRight ? 1 : -1) * (mechanism.halfExtents.x + WHEEL_RADIUS),
+        y: mechanism.start.y,
+      };
+    } else {
+      this.wheelPosition = { x: 0, y: 5.2 };
+    }
+    this.previousWheelPosition = { ...this.wheelPosition };
     this.world = new RAPIER.World({ x: 0, y: -12.5 });
     this.world.timestep = FIXED_DT;
 
