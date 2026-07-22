@@ -2,6 +2,12 @@
 
 Playable greybox for the P0 gate defined in `SPINHAND_GDD.md`.
 
+## Play online
+
+[Launch the latest `main` build on GitHub Pages](https://softxuep-dotcom.github.io/Spinhand/).
+
+Every push to `main` is built and deployed by `.github/workflows/deploy-pages.yml`.
+
 ## Run
 
 ```bash
@@ -9,7 +15,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL in a portrait viewport. Hold and drag to move the clockwise power wheel. The wheel is intentionally **not** a physical circle: only the rim sweep applies bounded tangential impulses.
+Open the `/Spinhand/` URL shown by Vite in a portrait viewport. Hold and drag to move the clockwise power wheel. The wheel is intentionally **not** a physical circle: only the rim sweep applies bounded tangential impulses.
 
 ## Controls
 
