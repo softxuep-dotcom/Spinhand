@@ -49,14 +49,13 @@ export const CHAPTER_ONE_LEVELS: readonly CampaignLevel[] = [
     hint: "上轮缘向右",
     accent: 0x4ac6ff,
     object: { kind: "ball", start: { x: -2.35, y: -1.94 }, radius: 0.56, density: 1.05 },
-    goal: { kind: "cup", position: { x: 2.75, y: -2.2 }, halfExtents: { x: 0.72, y: 0.72 } },
+    goal: { kind: "cup", position: { x: -0.55, y: -2.2 }, halfExtents: { x: 1.2, y: 0.76 } },
     bolt: { x: 0.15, y: -0.65 },
     platforms: [
       ...sideWalls,
       { position: { x: -1.55, y: -2.62 }, halfExtents: { x: 2.25, y: 0.16 }, rotation: 0 },
-      { position: { x: 1.35, y: -2.62 }, halfExtents: { x: 0.75, y: 0.16 }, rotation: 0 },
-      { position: { x: 2.75, y: -2.85 }, halfExtents: { x: 0.72, y: 0.16 }, rotation: 0 },
-      { position: { x: 3.42, y: -2.05 }, halfExtents: { x: 0.12, y: 0.68 }, rotation: 0 },
+      { position: { x: -0.55, y: -2.85 }, halfExtents: { x: 1.2, y: 0.16 }, rotation: 0 },
+      { position: { x: 0.65, y: -2.05 }, halfExtents: { x: 0.12, y: 0.72 }, rotation: 0 },
     ],
   },
   {

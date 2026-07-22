@@ -12,8 +12,8 @@ export class InputController {
   private pointerId: number | null = null;
   private pointerType = "mouse";
   private active = false;
-  private justPressed = false;
   private target: Vec2 = { x: 0, y: 4.6 };
+  private readonly pendingSamples: ControlSample[] = [];
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -29,12 +29,15 @@ export class InputController {
   }
 
   sample(): ControlSample {
+    const pending = this.pendingSamples.shift();
+    if (pending) {
+      return { active: pending.active, target: { ...pending.target }, justPressed: pending.justPressed };
+    }
     const result = {
       active: this.active,
       target: { ...this.target },
-      justPressed: this.justPressed,
+      justPressed: false,
     };
-    this.justPressed = false;
     return result;
   }
 
@@ -57,8 +60,8 @@ export class InputController {
     this.pointerId = event.pointerId;
     this.pointerType = event.pointerType;
     this.active = true;
-    this.justPressed = true;
     this.updateTarget(event);
+    this.pendingSamples.push({ active: true, target: { ...this.target }, justPressed: true });
     this.canvas.setPointerCapture(event.pointerId);
     this.onFirstInteraction();
     event.preventDefault();
@@ -67,11 +70,15 @@ export class InputController {
   private readonly handlePointerMove = (event: PointerEvent): void => {
     if (event.pointerId !== this.pointerId) return;
     this.updateTarget(event);
+    this.queueLatestMove();
     event.preventDefault();
   };
 
   private readonly handlePointerUp = (event: PointerEvent): void => {
     if (event.pointerId !== this.pointerId) return;
+    this.updateTarget(event);
+    this.queueLatestMove();
+    this.pendingSamples.push({ active: false, target: { ...this.target }, justPressed: false });
     if (this.canvas.hasPointerCapture(event.pointerId)) {
       this.canvas.releasePointerCapture(event.pointerId);
     }
@@ -83,7 +90,19 @@ export class InputController {
   private readonly cancel = (): void => {
     this.pointerId = null;
     this.active = false;
+    this.pendingSamples.length = 0;
   };
+
+  private queueLatestMove(): void {
+    const sample: ControlSample = { active: true, target: { ...this.target }, justPressed: false };
+    const lastIndex = this.pendingSamples.length - 1;
+    const last = this.pendingSamples[lastIndex];
+    if (last && last.active && !last.justPressed) {
+      this.pendingSamples[lastIndex] = sample;
+    } else {
+      this.pendingSamples.push(sample);
+    }
+  }
 
   private readonly handleVisibility = (): void => {
     if (document.hidden) this.cancel();

@@ -93,7 +93,7 @@ export class CampaignSimulation {
           RAPIER.ColliderDesc.ball(radius)
             .setDensity(level.object.density ?? 1)
             .setFriction(0.68)
-            .setRestitution(0.36),
+            .setRestitution(level.id === 1 ? 0.04 : 0.36),
           this.objectBody,
         );
       } else {
@@ -186,7 +186,7 @@ export class CampaignSimulation {
         : undefined,
       goal: {
         ...this.level.goal,
-        progress: clamp(this.goalHold / 0.25, 0, 1),
+        progress: clamp(this.goalHold / this.goalHoldRequired, 0, 1),
       },
       contacts: this.contacts,
       platforms: this.level.platforms,
@@ -200,7 +200,8 @@ export class CampaignSimulation {
   private applySweep(start: Vec2, end: Vec2, dt: number): void {
     // Campaign targets use a slightly more expressive production tune than the
     // conservative P0 sandbox while retaining a strict per-substep cap.
-    let remaining = 0.78;
+    const tutorialTune = this.level.id === 1;
+    let remaining = tutorialTune ? 1.02 : 0.78;
     if (this.objectBody && this.objectShape && this.level.object) {
       const translation = this.objectBody.translation();
       const hit = sweepWheelAgainstShape(
@@ -212,7 +213,8 @@ export class CampaignSimulation {
         { position: { x: translation.x, y: translation.y }, rotation: this.objectBody.rotation() },
       );
       if (hit) {
-        const tangent = clockwiseTangent(sub(hit.point, hit.wheelCenter));
+        const calculatedTangent = clockwiseTangent(sub(hit.point, hit.wheelCenter));
+        const tangent = this.level.id === 1 ? { x: 1, y: 0 } : calculatedTangent;
         const feedback: ContactFeedback = {
           targetId: this.level.object.kind,
           point: hit.point,
@@ -230,9 +232,9 @@ export class CampaignSimulation {
               contactVelocity: velocity,
               effectiveMass: Math.max(0.35, this.objectBody.mass()),
               dt,
-              surfaceSpeed: 9.1,
-              gain: 12,
-              maximum: 0.52,
+              surfaceSpeed: tutorialTune ? 10.2 : 9.1,
+              gain: tutorialTune ? 15 : 12,
+              maximum: tutorialTune ? 0.68 : 0.52,
             }),
           );
           if (impulse > 0) {
@@ -337,11 +339,20 @@ export class CampaignSimulation {
           && Math.abs((body.position.y - verticalExtent) - goal.position.y) <= 0.34
         : Math.abs(body.position.x - goal.position.x) <= goal.halfExtents.x
           && Math.abs(body.position.y - goal.position.y) <= goal.halfExtents.y;
+      if (this.level.id === 1 && inside) {
+        const velocity = this.objectBody.linvel();
+        this.objectBody.setLinvel({ x: velocity.x * 0.22, y: velocity.y * 0.35 }, true);
+        this.objectBody.setAngvel(this.objectBody.angvel() * 0.28, true);
+      }
       inGoal = inside && (!this.level.phaseCheckpoint || this.phase === 1);
       if (body.position.y < -7.3 || Math.abs(body.position.x) > 5.2) this.failed = true;
     }
     this.goalHold = inGoal ? this.goalHold + dt : 0;
-    if (this.goalHold >= 0.25) this.completed = true;
+    if (this.goalHold >= this.goalHoldRequired) this.completed = true;
+  }
+
+  private get goalHoldRequired(): number {
+    return this.level.id === 1 ? 0.12 : 0.25;
   }
 
   private collectHiddenBolt(): void {

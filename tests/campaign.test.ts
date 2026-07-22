@@ -52,12 +52,13 @@ describe("chapter one campaign", () => {
     const simulation = new CampaignSimulation(getCampaignLevel(1));
     idle(simulation);
     const before = simulation.getRenderState().object!;
-    simulation.step({ active: true, justPressed: true, target: { x: before.position.x - 0.25, y: before.position.y - 1.28 } }, FIXED_DT);
-    for (let index = 0; index < 260 && !simulation.getRenderState().completed; index += 1) {
-      const object = simulation.getRenderState().object!;
-      const reachedCup = object.position.x > 2.15;
-      simulation.step({ active: !reachedCup, justPressed: false, target: { x: object.position.x - 0.15, y: object.position.y - 1.28 } }, FIXED_DT);
-    }
+    drag(
+      simulation,
+      { x: before.position.x - 0.75, y: before.position.y - 1.28 },
+      { x: before.position.x + 1.65, y: before.position.y - 1.28 },
+      48,
+    );
+    idle(simulation, 100);
     const after = simulation.getRenderState().object!;
     expect(after.position.x).toBeGreaterThan(before.position.x + 0.5);
     expect(simulation.getRenderState().completed).toBe(true);
