@@ -1,68 +1,180 @@
 import RAPIER from "@dimforge/rapier2d-compat";
 import "./style.css";
 import { MotorAudio } from "./audio/MotorAudio";
+import { CampaignSave } from "./game/campaign/CampaignSave";
+import { CampaignSimulation } from "./game/campaign/CampaignSimulation";
+import { CHAPTER_ONE_LEVELS, getCampaignLevel } from "./game/campaign/levels";
 import { FIXED_DT, MAX_CATCH_UP_STEPS, MAX_FRAME_DELTA } from "./game/config";
-import { InputController, type ControlSample } from "./game/input/InputController";
-import { InputRecorder, type RecordedInput } from "./game/input/InputRecorder";
-import { SpinhandSimulation } from "./game/simulation/SpinhandSimulation";
-import { SpinhandRenderer } from "./render/SpinhandRenderer";
+import { InputController } from "./game/input/InputController";
+import { CampaignRenderer } from "./render/CampaignRenderer";
 
-const requiredElement = <T extends HTMLElement>(id: string): T => {
+const required = <T extends HTMLElement>(id: string): T => {
   const element = document.getElementById(id);
   if (!element) throw new Error(`Missing required element: #${id}`);
   return element as T;
 };
 
-const toControlSample = (sample: RecordedInput): ControlSample => ({
-  active: sample.active,
-  target: { x: sample.x, y: sample.y },
-  justPressed: sample.justPressed,
-});
-
 await RAPIER.init();
 
-const canvas = requiredElement<HTMLCanvasElement>("game-canvas");
-const loading = requiredElement<HTMLDivElement>("loading");
-const contactStatus = requiredElement<HTMLElement>("contact-status");
-const inputHint = requiredElement<HTMLDivElement>("input-hint");
-const debugPanel = requiredElement<HTMLElement>("debug-panel");
-const debugMetrics = requiredElement<HTMLElement>("debug-metrics");
-const replayStatus = requiredElement<HTMLElement>("replay-status");
-const simulation = new SpinhandSimulation();
-const renderer = new SpinhandRenderer(canvas, simulation.getRenderState());
+const canvas = required<HTMLCanvasElement>("game-canvas");
+const shell = required<HTMLDivElement>("game-shell");
+const loading = required<HTMLDivElement>("loading");
+const pausePanel = required<HTMLElement>("pause-panel");
+const levelsPanel = required<HTMLElement>("levels-panel");
+const chapterPanel = required<HTMLElement>("chapter-panel");
+const levelProgress = required<HTMLElement>("level-progress");
+const objectiveVerb = required<HTMLElement>("objective-verb");
+const objectiveName = required<HTMLElement>("objective-name");
+const inputHint = required<HTMLElement>("input-hint");
+const hintCopy = required<HTMLElement>("hint-copy");
+const contactStatus = required<HTMLElement>("contact-status");
+const resultToast = required<HTMLElement>("result-toast");
+const resultBolts = required<HTMLElement>("result-bolts");
+const totalBolts = required<HTMLElement>("total-bolts");
+const levelGrid = required<HTMLDivElement>("level-grid");
+const soundToggle = required<HTMLInputElement>("sound-toggle");
+const hapticsToggle = required<HTMLInputElement>("haptics-toggle");
+const motionToggle = required<HTMLInputElement>("motion-toggle");
+
+const save = new CampaignSave();
 const audio = new MotorAudio();
-const recorder = new InputRecorder();
+let currentLevel = Math.min(5, Math.max(1, save.data.highestUnlocked));
+let simulation = new CampaignSimulation(getCampaignLevel(currentLevel));
+const renderer = new CampaignRenderer(canvas, simulation.getRenderState());
 const input = new InputController(canvas, renderer.clientToWorld, () => audio.unlock());
 
 let accumulator = 0;
 let lastTime = performance.now();
-let debugVisible = new URLSearchParams(window.location.search).has("debug");
-let runningConsistencyTest = false;
+let paused = false;
+let transitioning = false;
+let restartCount = 0;
 let hintDismissed = false;
+let failureTimer: number | undefined;
+let levelsFromChapter = false;
 
-const setDebugVisible = (visible: boolean): void => {
-  debugVisible = visible;
-  debugPanel.hidden = !visible;
-  renderer.setDebugVisible(visible);
+const applySettings = (): void => {
+  const settings = save.data.settings;
+  soundToggle.checked = settings.sound;
+  hapticsToggle.checked = settings.haptics;
+  motionToggle.checked = settings.reducedMotion;
+  audio.setEnabled(settings.sound);
+  audio.setHapticsEnabled(settings.haptics);
+  shell.classList.toggle("reduced-motion", settings.reducedMotion);
 };
 
-const resetSandbox = (): void => {
-  recorder.stop();
-  simulation.reset();
-  replayStatus.textContent = "沙盘已重置";
+const buildLevelGrid = (): void => {
+  levelGrid.replaceChildren();
+  for (const level of CHAPTER_ONE_LEVELS) {
+    const button = document.createElement("button");
+    const unlocked = level.id <= save.data.highestUnlocked || Boolean(save.data.results[String(level.id)]?.complete);
+    button.type = "button";
+    button.className = "level-button";
+    button.disabled = !unlocked;
+    button.dataset.level = String(level.id);
+    const bolts = save.boltsFor(level.id);
+    button.innerHTML = `<span>${level.id}</span><strong>${level.name}</strong><small>${unlocked ? `${"◆".repeat(bolts)}${"◇".repeat(3 - bolts)}` : "锁定"}</small>`;
+    button.addEventListener("click", () => {
+      if (!unlocked) return;
+      levelsPanel.hidden = true;
+      pausePanel.hidden = true;
+      chapterPanel.hidden = true;
+      startLevel(level.id, false);
+    });
+    levelGrid.append(button);
+  }
+};
+
+const updateLevelHud = (): void => {
+  const level = getCampaignLevel(currentLevel);
+  levelProgress.textContent = `${currentLevel} / 5`;
+  objectiveVerb.textContent = level.verb;
+  objectiveName.textContent = level.name;
+  hintCopy.textContent = `按住拖动 · ${level.hint}`;
+  inputHint.classList.remove("is-hidden");
+  hintDismissed = false;
+};
+
+const startLevel = (level: number, countRestart: boolean): void => {
+  if (failureTimer !== undefined) window.clearTimeout(failureTimer);
+  if (countRestart) restartCount += 1;
+  else restartCount = 0;
+  currentLevel = Math.max(1, Math.min(5, level));
+  simulation = new CampaignSimulation(getCampaignLevel(currentLevel));
+  renderer.loadLevel(simulation.getRenderState());
+  paused = false;
+  transitioning = false;
+  accumulator = 0;
+  lastTime = performance.now();
+  failureTimer = undefined;
+  shell.classList.remove("level-complete", "level-failed");
+  resultToast.classList.remove("is-visible");
+  pausePanel.hidden = true;
+  updateLevelHud();
+};
+
+const setPaused = (value: boolean): void => {
+  paused = value;
+  pausePanel.hidden = !value;
+  shell.classList.toggle("is-paused", value);
+  lastTime = performance.now();
+  accumulator = 0;
+  if (value) audio.suspend();
+};
+
+const showLevels = (returnToChapter = false): void => {
+  paused = true;
+  levelsFromChapter = returnToChapter;
+  pausePanel.hidden = true;
+  chapterPanel.hidden = true;
+  buildLevelGrid();
+  levelsPanel.hidden = false;
+};
+
+const showChapterComplete = (): void => {
+  paused = true;
+  transitioning = false;
+  shell.classList.remove("level-complete");
+  totalBolts.textContent = `${save.totalBolts()} / 15`;
+  buildLevelGrid();
+  chapterPanel.hidden = false;
+};
+
+const handleCompletion = (): void => {
+  if (transitioning) return;
+  transitioning = true;
+  const state = simulation.getRenderState();
+  const result = {
+    level: currentLevel,
+    noRestart: restartCount === 0,
+    hiddenBolt: state.hiddenBolt.collected,
+  };
+  save.complete(result);
+  const earned = 1 + Number(result.noRestart) + Number(result.hiddenBolt);
+  resultBolts.textContent = `${"◆".repeat(earned)}${"◇".repeat(3 - earned)}`;
+  resultToast.classList.add("is-visible");
+  shell.classList.add("level-complete");
+  audio.success();
+  window.setTimeout(() => {
+    if (currentLevel < 5) startLevel(currentLevel + 1, false);
+    else showChapterComplete();
+  }, save.data.settings.reducedMotion ? 300 : 760);
+};
+
+const handleFailure = (): void => {
+  if (failureTimer !== undefined) return;
+  shell.classList.add("level-failed");
+  audio.failure();
+  failureTimer = window.setTimeout(() => startLevel(currentLevel, true), save.data.settings.reducedMotion ? 180 : 420);
 };
 
 const updateHud = (): void => {
   const state = simulation.getRenderState();
   const contact = state.contacts.find((item) => item.invalidDeep) ?? state.contacts.find((item) => item.impulse > 0);
-  const totalImpulse = state.contacts.reduce((sum, item) => sum + item.impulse, 0);
-  const renderStats = renderer.getRenderStats();
-
   if (contact?.invalidDeep) {
-    contactStatus.textContent = "深穿空转";
+    contactStatus.textContent = "贴得太深 · 空转";
     contactStatus.dataset.state = "invalid";
   } else if (contact) {
-    contactStatus.textContent = `切向施力 · ${contact.targetId}`;
+    contactStatus.textContent = "切向施力";
     contactStatus.dataset.state = "contact";
     if (!hintDismissed) {
       hintDismissed = true;
@@ -75,102 +187,84 @@ const updateHud = (): void => {
     contactStatus.textContent = "轮缘空转";
     contactStatus.dataset.state = "idle";
   }
-
-  debugMetrics.textContent = `J ${totalImpulse.toFixed(3)} · ω球 ${state.ball.angularVelocity.toFixed(2)} · ω齿 ${state.gear.angularVelocity.toFixed(2)} · ${renderStats.calls} calls`;
-  audio.update(state.wheel.active, totalImpulse, Boolean(contact?.invalidDeep));
+  if (currentLevel === 5 && state.phase > 0 && !state.completed) {
+    objectiveVerb.textContent = "现在换到上方";
+    hintCopy.textContent = "下轮缘向左 · 扫入高处杯中";
+  }
+  const impulse = state.contacts.reduce((sum, item) => sum + item.impulse, 0);
+  audio.update(state.wheel.active && !paused, impulse, Boolean(contact?.invalidDeep));
+  if (state.completed) handleCompletion();
+  if (state.failed) handleFailure();
 };
 
-const runConsistencyTest = async (): Promise<void> => {
-  const samples = [...recorder.getSamples()];
-  if (samples.length === 0 || runningConsistencyTest) {
-    replayStatus.textContent = "请先录制一段有效操作";
-    return;
+required<HTMLButtonElement>("reset-button").addEventListener("click", () => startLevel(currentLevel, true));
+required<HTMLButtonElement>("pause-button").addEventListener("click", () => setPaused(true));
+required<HTMLButtonElement>("continue-button").addEventListener("click", () => setPaused(false));
+required<HTMLButtonElement>("pause-restart-button").addEventListener("click", () => startLevel(currentLevel, true));
+required<HTMLButtonElement>("levels-button").addEventListener("click", () => showLevels(false));
+required<HTMLButtonElement>("levels-close-button").addEventListener("click", () => {
+  levelsPanel.hidden = true;
+  if (levelsFromChapter) {
+    chapterPanel.hidden = false;
+    paused = true;
+  } else {
+    setPaused(false);
   }
-
-  runningConsistencyTest = true;
-  recorder.stop();
-  let reference: readonly number[] | null = null;
-  let matches = 0;
-
-  for (let run = 0; run < 100; run += 1) {
-    simulation.reset();
-    for (const sample of samples) simulation.step(toControlSample(sample), FIXED_DT);
-    const signature = simulation.getSignature();
-    reference ??= signature;
-    const equal = signature.every((value, index) => Math.abs(value - (reference?.[index] ?? Number.NaN)) < 1e-7);
-    if (equal) matches += 1;
-    if ((run + 1) % 5 === 0) {
-      replayStatus.textContent = `一致性检查 ${run + 1}/100…`;
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    }
-  }
-
-  simulation.reset();
-  runningConsistencyTest = false;
-  replayStatus.textContent = `一致性 ${matches}/100 ${matches >= 98 ? "✓" : "未达 98%"}`;
-};
-
-requiredElement<HTMLButtonElement>("reset-button").addEventListener("click", resetSandbox);
-requiredElement<HTMLButtonElement>("debug-button").addEventListener("click", () => setDebugVisible(!debugVisible));
-requiredElement<HTMLButtonElement>("record-button").addEventListener("click", () => {
-  simulation.reset();
-  recorder.startRecording();
-  replayStatus.textContent = "正在录制（最多 10 秒）";
 });
-requiredElement<HTMLButtonElement>("stop-button").addEventListener("click", () => {
-  recorder.stop();
-  replayStatus.textContent = `已录制 ${recorder.length} 帧`;
+required<HTMLButtonElement>("chapter-levels-button").addEventListener("click", () => showLevels(true));
+required<HTMLButtonElement>("replay-chapter-button").addEventListener("click", () => {
+  chapterPanel.hidden = true;
+  startLevel(1, false);
 });
-requiredElement<HTMLButtonElement>("play-button").addEventListener("click", () => {
-  simulation.reset();
-  replayStatus.textContent = recorder.startPlayback() ? `回放 ${recorder.length} 帧` : "没有可回放的输入";
+
+soundToggle.addEventListener("change", () => {
+  save.setSetting("sound", soundToggle.checked);
+  audio.setEnabled(soundToggle.checked);
 });
-requiredElement<HTMLButtonElement>("repeat-button").addEventListener("click", () => void runConsistencyTest());
-requiredElement<HTMLButtonElement>("export-button").addEventListener("click", () => {
-  if (recorder.length === 0) {
-    replayStatus.textContent = "没有可导出的输入";
-    return;
-  }
-  const blob = new Blob([recorder.exportJson()], { type: "application/json" });
-  const anchor = document.createElement("a");
-  anchor.href = URL.createObjectURL(blob);
-  anchor.download = `spinhand-input-${Date.now()}.json`;
-  anchor.click();
-  URL.revokeObjectURL(anchor.href);
-  replayStatus.textContent = "输入轨迹已导出";
+hapticsToggle.addEventListener("change", () => {
+  save.setSetting("haptics", hapticsToggle.checked);
+  audio.setHapticsEnabled(hapticsToggle.checked);
+});
+motionToggle.addEventListener("change", () => {
+  save.setSetting("reducedMotion", motionToggle.checked);
+  shell.classList.toggle("reduced-motion", motionToggle.checked);
 });
 
 window.addEventListener("keydown", (event) => {
   if (event.repeat) return;
-  if (event.key.toLowerCase() === "r") resetSandbox();
-  if (event.key.toLowerCase() === "d") setDebugVisible(!debugVisible);
+  if (event.key.toLowerCase() === "r") startLevel(currentLevel, true);
+  if (event.key === "Escape" || event.key.toLowerCase() === "p") {
+    if (!chapterPanel.hidden || !levelsPanel.hidden) return;
+    setPaused(!paused);
+  }
 });
-window.addEventListener("blur", () => audio.suspend());
+window.addEventListener("blur", () => {
+  if (!transitioning) setPaused(true);
+});
 document.addEventListener("visibilitychange", () => {
   lastTime = performance.now();
   accumulator = 0;
   if (document.hidden) audio.suspend();
 });
 
-setDebugVisible(debugVisible);
+applySettings();
+updateLevelHud();
+buildLevelGrid();
 loading.classList.add("is-hidden");
 
 renderer.renderer.setAnimationLoop((time) => {
   const frameDelta = Math.min(MAX_FRAME_DELTA, Math.max(0, (time - lastTime) / 1000));
   lastTime = time;
-
-  if (!runningConsistencyTest) {
+  if (!paused && !transitioning) {
     accumulator += frameDelta;
-    let stepCount = 0;
-    while (accumulator >= FIXED_DT && stepCount < MAX_CATCH_UP_STEPS) {
-      const control = recorder.resolve(input.sample());
-      simulation.step(control, FIXED_DT);
+    let steps = 0;
+    while (accumulator >= FIXED_DT && steps < MAX_CATCH_UP_STEPS) {
+      simulation.step(input.sample(), FIXED_DT);
       accumulator -= FIXED_DT;
-      stepCount += 1;
+      steps += 1;
     }
-    if (stepCount === MAX_CATCH_UP_STEPS) accumulator = 0;
+    if (steps === MAX_CATCH_UP_STEPS) accumulator = 0;
   }
-
   updateHud();
   renderer.render(simulation.getRenderState(), frameDelta);
 });

@@ -1,6 +1,6 @@
-# Spinhand P0
+# Spinhand · 第一章
 
-Playable greybox for the P0 gate defined in `SPINHAND_GDD.md`.
+基于 `SPINHAND_GDD.md` 制作的 2.5D 竖屏物理游戏。Three.js 负责真实 3D 网格、材质、灯光和正交相机；Rapier 2D 负责固定 XY 平面的物理模拟。
 
 ## Play online
 
@@ -15,23 +15,18 @@ npm install
 npm run dev
 ```
 
-Open the `/Spinhand/` URL shown by Vite in a portrait viewport. Hold and drag to move the clockwise power wheel. The wheel is intentionally **not** a physical circle: only the rim sweep applies bounded tangential impulses.
+打开 Vite 输出的 `/Spinhand/` 地址。按住并拖动永远顺时针旋转的动力轮；动力轮不是普通圆形碰撞体，只有轮缘扫掠会施加有上限的切向冲量。
 
 ## Controls
 
 - Pointer/touch hold + drag: engage and move the wheel
-- `R`: reset the sandbox
-- `D`: toggle wheel-sweep diagnostics
-- Debug panel: record up to 10 seconds, replay it, run the same input 100 times, or export JSON
+- `R`：重开当前关卡
+- `Esc` / `P`：暂停或继续
 
-Append `?debug=1` to open diagnostics on boot.
+## 第一章内容
 
-## P0 scope
-
-- Ball, box, and fixed-axis gear
-- 60 Hz fixed-step Rapier 2D simulation with at most two active-contact substeps
-- touch offset, filtered wheel tracking, continuous sampled rim sweep, impulse caps, deep-overlap rejection
-- tangential sparks, basic motor/contact audio, normal/tangent debug vectors
-- input recording and 100-run functional consistency check
-
-No goals, levels, save data, platform SDK, advertisements, skins, or production assets are included.
+- 5 个连续微关卡：向右搓、往回扫、提门栓、压冲头、两次换边
+- 球、木箱与两种单轴机关，全部遵守同一套公开轮缘规则
+- 完成、无重开、隐藏螺栓三项收集，本地存档与章节完成界面
+- 60 Hz 固定步进、最多两个接触子步、连续轮缘扫掠、冲量上限与深穿拒绝
+- 3D 工坊场景、实时灯光阴影、火花、程序化音效、触感与降低动态选项

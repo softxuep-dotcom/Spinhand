@@ -3,44 +3,87 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-    <meta name="theme-color" content="#171424" />
-    <title>Spinhand · P0</title>
+    <meta name="theme-color" content="#121522" />
+    <meta name="description" content="拖动永远顺时针旋转的动力轮，用轮缘方向完成精巧的机械谜题。" />
+    <title>Spinhand · 动力轮</title>
   </head>
   <body>
-    <main id="app" aria-label="Spinhand P0 物理沙盘">
+    <main id="app" aria-label="Spinhand 动力轮">
       <div id="game-shell">
-        <canvas id="game-canvas" aria-label="动力轮物理沙盘"></canvas>
+        <canvas id="game-canvas" aria-label="动力轮第一章游戏区域"></canvas>
+
         <div id="hud" aria-live="polite">
           <div class="top-row">
-            <button id="reset-button" class="icon-button" type="button" aria-label="重置沙盘">↻</button>
-            <div class="prototype-chip">
-              <span>P0 · 物理沙盘</span>
-              <strong id="contact-status">轮缘空转</strong>
+            <button id="reset-button" class="icon-button" type="button" aria-label="重新开始本关">↻</button>
+            <div class="level-chip">
+              <span id="chapter-label">第一章 · 认识轮缘</span>
+              <strong id="level-progress">1 / 5</strong>
             </div>
-            <button id="debug-button" class="icon-button" type="button" aria-label="切换调试面板">⌁</button>
+            <button id="pause-button" class="icon-button" type="button" aria-label="暂停游戏">Ⅱ</button>
           </div>
+
+          <div id="objective-chip" class="objective-chip">
+            <span id="objective-verb">从下方切入</span>
+            <strong id="objective-name">向右搓</strong>
+          </div>
+
           <div id="input-hint" class="input-hint">
-            <span class="hint-wheel" aria-hidden="true"></span>
-            <span>按住并拖动，轮心会停在触点上方</span>
+            <span class="hint-gesture" aria-hidden="true"><i></i></span>
+            <span id="hint-copy">按住拖动 · 上轮缘向右</span>
           </div>
-          <section id="debug-panel" class="debug-panel" aria-label="物理调试" hidden>
-            <div class="debug-head">
-              <strong>轮缘诊断</strong>
-              <span id="debug-metrics">等待接触</span>
-            </div>
-            <div class="debug-actions">
-              <button id="record-button" type="button">录制</button>
-              <button id="stop-button" type="button">停止</button>
-              <button id="play-button" type="button">回放</button>
-              <button id="repeat-button" type="button">一致性 ×100</button>
-              <button id="export-button" type="button">导出</button>
-            </div>
-            <div id="replay-status">D：调试 · R：重置</div>
-          </section>
+
+          <div id="contact-status" class="contact-status" data-state="idle">轮缘空转</div>
+          <div id="result-toast" class="result-toast" aria-hidden="true">
+            <span>完成</span>
+            <div id="result-bolts" class="bolt-row" aria-label="本关螺栓">◆ ◆ ◆</div>
+          </div>
         </div>
+
+        <section id="pause-panel" class="overlay pause-panel" aria-label="暂停菜单" hidden>
+          <div class="panel-card compact-card">
+            <span class="eyebrow">动力轮已抬起</span>
+            <h2>暂停</h2>
+            <button id="continue-button" class="primary-button" type="button">继续</button>
+            <div class="button-pair">
+              <button id="pause-restart-button" class="secondary-button" type="button">重开本关</button>
+              <button id="levels-button" class="secondary-button" type="button">关卡</button>
+            </div>
+            <div class="settings" aria-label="设置">
+              <label><span>声音</span><input id="sound-toggle" type="checkbox" checked /></label>
+              <label><span>触感</span><input id="haptics-toggle" type="checkbox" checked /></label>
+              <label><span>降低动态</span><input id="motion-toggle" type="checkbox" /></label>
+            </div>
+          </div>
+        </section>
+
+        <section id="levels-panel" class="overlay" aria-label="第一章关卡" hidden>
+          <div class="panel-card">
+            <button id="levels-close-button" class="close-button" type="button" aria-label="关闭关卡列表">×</button>
+            <span class="eyebrow">第一章</span>
+            <h2>认识轮缘</h2>
+            <p class="panel-copy">接触哪一侧，就决定力量去向。</p>
+            <div id="level-grid" class="level-grid"></div>
+          </div>
+        </section>
+
+        <section id="chapter-panel" class="overlay chapter-panel" aria-label="第一章完成" hidden>
+          <div class="panel-card chapter-card">
+            <div class="chapter-emblem" aria-hidden="true"><span></span></div>
+            <span class="eyebrow">章节完成</span>
+            <h1>认识轮缘</h1>
+            <p>你已经让同一只顺时针动力轮完成了推、扫、抬、压与换向。</p>
+            <div class="chapter-reward">
+              <div><strong id="total-bolts">0 / 15</strong><span>工坊螺栓</span></div>
+              <div><strong>已解锁</strong><span>黄铜轮皮 · 玩具台</span></div>
+            </div>
+            <button id="replay-chapter-button" class="primary-button" type="button">重玩第一章</button>
+            <button id="chapter-levels-button" class="text-button" type="button">选择关卡</button>
+          </div>
+        </section>
+
         <div id="loading" role="status">
           <span class="loading-wheel" aria-hidden="true"></span>
-          <span>装配动力轮…</span>
+          <span>装配工坊…</span>
         </div>
       </div>
     </main>
