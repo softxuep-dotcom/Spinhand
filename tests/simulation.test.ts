@@ -1,6 +1,6 @@
 import RAPIER from "@dimforge/rapier2d-compat";
 import { beforeAll, describe, expect, it } from "vitest";
-import { FIXED_DT } from "../src/game/config";
+import { FIXED_DT, WHEEL_TOTAL_IMPULSE } from "../src/game/config";
 import type { ControlSample } from "../src/game/input/InputController";
 import { SpinhandSimulation } from "../src/game/simulation/SpinhandSimulation";
 
@@ -73,6 +73,27 @@ describe("P0 sandbox responses", () => {
     const gear = simulation.getRenderState().gear;
     expect(Math.abs(gear.rotation)).toBeGreaterThan(0.05);
     expect(Math.abs(gear.angularVelocity)).toBeGreaterThan(0.05);
+  });
+
+  it("shares one fixed-frame impulse budget across two contact substeps", () => {
+    const simulation = new SpinhandSimulation();
+    idle(simulation);
+    const ball = simulation.getRenderState().ball;
+    const wheelY = ball.position.y - 0.56 - 0.72;
+    simulation.step({ active: true, target: { x: ball.position.x - 0.35, y: wheelY }, justPressed: true }, FIXED_DT);
+    simulation.step({ active: true, target: { x: ball.position.x + 1.05, y: wheelY }, justPressed: false }, FIXED_DT);
+    const contacts = simulation.getRenderState().contacts;
+    const totalImpulse = contacts.reduce((sum, contact) => sum + contact.impulse, 0);
+    expect(contacts.filter((contact) => contact.impulse > 0)).toHaveLength(2);
+    expect(totalImpulse).toBeGreaterThan(0.34);
+    expect(totalImpulse).toBeLessThanOrEqual(WHEEL_TOTAL_IMPULSE + 1e-7);
+  });
+
+  it("stops the controlled wheel at a solid sandbox wall", () => {
+    const simulation = new SpinhandSimulation();
+    simulation.step({ active: true, target: { x: 0, y: 0 }, justPressed: true }, FIXED_DT);
+    simulation.step({ active: true, target: { x: 5, y: 0 }, justPressed: false }, FIXED_DT);
+    expect(simulation.getRenderState().wheel.position.x).toBeLessThanOrEqual(3.42);
   });
 
   it("reproduces one recorded input with the same functional result 100 times", () => {

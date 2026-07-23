@@ -8,6 +8,7 @@ export interface CampaignRenderState {
   object?: BodyRenderState & { kind: LevelObjectKind };
   mechanism?: {
     kind: MechanismKind;
+    axis: "x" | "y";
     position: Vec2;
     halfExtents: Vec2;
     progress: number;

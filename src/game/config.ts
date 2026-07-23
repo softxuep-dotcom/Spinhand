@@ -13,6 +13,7 @@ export const WHEEL_SURFACE_SPEED = 7.2;
 export const WHEEL_GAIN = 8.5;
 export const WHEEL_MAX_IMPULSE = 0.34;
 export const WHEEL_TOTAL_IMPULSE = 0.5;
+export const CAMPAIGN_WHEEL_TOTAL_IMPULSE = 0.78;
 export const WHEEL_TOKEN_CAPACITY = 0.8;
 export const WHEEL_TOKEN_REFILL = 18;
 

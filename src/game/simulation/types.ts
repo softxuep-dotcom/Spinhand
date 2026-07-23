@@ -1,6 +1,6 @@
 import type { Vec2 } from "../math/vec2";
 
-export type TargetId = "ball" | "box" | "gear" | "bolt" | "plunger";
+export type TargetId = "ball" | "box" | "gear" | "rack" | "bolt" | "plunger";
 
 export interface BodyRenderState {
   position: Vec2;
@@ -23,7 +23,10 @@ export interface PlatformState {
   halfExtents: Vec2;
   rotation: number;
   friction?: number;
-  surface?: "standard" | "slick";
+  surface?: "standard" | "slick" | "guide";
+  // Background guide rails support dynamic bodies but visibly sit behind the
+  // foreground power wheel. Solid platforms block both layers by default.
+  blocksWheel?: boolean;
 }
 
 export interface SimulationRenderState {

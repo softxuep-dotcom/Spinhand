@@ -144,10 +144,19 @@ export class SpinhandRenderer {
 
   private createPlatforms(state: SimulationRenderState): void {
     const material = new THREE.MeshStandardMaterial({ color: 0x655d77, roughness: 0.65, metalness: 0.22 });
+    const guideMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4c7181,
+      emissive: 0x143e50,
+      emissiveIntensity: 0.25,
+      transparent: true,
+      opacity: 0.58,
+      roughness: 0.44,
+      metalness: 0.46,
+    });
     for (const platform of state.platforms) {
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(platform.halfExtents.x * 2, platform.halfExtents.y * 2, 0.7),
-        material,
+        platform.surface === "guide" ? guideMaterial : material,
       );
       mesh.position.set(platform.position.x, platform.position.y, 0);
       mesh.rotation.z = platform.rotation;

@@ -10,6 +10,7 @@ import {
 } from "../config";
 import type { ControlSample } from "../input/InputController";
 import {
+  add,
   clamp,
   clockwiseTangent,
   cross,
@@ -20,7 +21,8 @@ import {
   type Vec2,
 } from "../math/vec2";
 import { calculateTangentialImpulse } from "./contactMath";
-import { sweepWheelAgainstShape, type ContactShape, type SweepHit } from "./sweep";
+import { FrameImpulseBudget } from "./FrameImpulseBudget";
+import { sampleShape, sweepWheelAgainstShape, type ContactShape, type SweepHit } from "./sweep";
 import type {
   BodyRenderState,
   ContactFeedback,
@@ -53,8 +55,8 @@ export const SANDBOX_PLATFORMS: readonly PlatformState[] = [
   { position: { x: 0, y: -7.45 }, halfExtents: { x: 4.45, y: 0.35 }, rotation: 0 },
   { position: { x: -4.35, y: 0 }, halfExtents: { x: 0.22, y: 7.2 }, rotation: 0 },
   { position: { x: 4.35, y: 0 }, halfExtents: { x: 0.22, y: 7.2 }, rotation: 0 },
-  { position: { x: -2.45, y: 1.28 }, halfExtents: { x: 1.72, y: 0.16 }, rotation: 0 },
-  { position: { x: 2.45, y: 1.28 }, halfExtents: { x: 1.72, y: 0.16 }, rotation: 0 },
+  { position: { x: -2.45, y: 1.28 }, halfExtents: { x: 1.72, y: 0.16 }, rotation: 0, surface: "guide", blocksWheel: false },
+  { position: { x: 2.45, y: 1.28 }, halfExtents: { x: 1.72, y: 0.16 }, rotation: 0, surface: "guide", blocksWheel: false },
 ];
 
 export class SpinhandSimulation {
@@ -148,8 +150,8 @@ export class SpinhandSimulation {
 
     if (control.justPressed || !this.wheelActive) {
       this.wheelActive = true;
-      this.wheelPosition = { ...control.target };
-      this.previousWheelPosition = { ...control.target };
+      this.wheelPosition = this.resolveWheelPlacement(control.target);
+      this.previousWheelPosition = { ...this.wheelPosition };
       this.stepWorld(dt);
       this.updateGear(dt);
       this.hadContact = false;
@@ -162,19 +164,21 @@ export class SpinhandSimulation {
     const shouldSubstep = this.hadContact || distance(this.wheelPosition, filteredTarget) > 0.42;
     const substepCount = shouldSubstep ? 2 : 1;
     const substepDt = dt / substepCount;
+    const frameBudget = new FrameImpulseBudget(WHEEL_TOTAL_IMPULSE);
     let current = { ...this.wheelPosition };
+    this.refillBudgets(dt);
 
     for (let index = 0; index < substepCount; index += 1) {
       const remaining = substepCount - index;
-      const next = lerp(current, filteredTarget, 1 / remaining);
-      this.refillBudgets(substepDt);
-      this.applyWheelSweep(current, next, substepDt);
+      const intended = lerp(current, filteredTarget, 1 / remaining);
+      const next = this.constrainWheelSweep(current, intended);
+      this.applyWheelSweep(current, next, substepDt, frameBudget);
       this.stepWorld(substepDt);
       this.updateGear(substepDt);
       current = next;
     }
 
-    this.wheelPosition = filteredTarget;
+    this.wheelPosition = current;
     this.hadContact = this.contacts.some((contact) => !contact.invalidDeep);
   }
 
@@ -232,7 +236,7 @@ export class SpinhandSimulation {
     ];
   }
 
-  private applyWheelSweep(start: Vec2, end: Vec2, dt: number): void {
+  private applyWheelSweep(start: Vec2, end: Vec2, dt: number, frameBudget: FrameImpulseBudget): void {
     const candidates: CandidateContact[] = this.dynamicTargets.flatMap((target) => {
       const translation = target.body.translation();
       const hit = sweepWheelAgainstShape(
@@ -257,7 +261,6 @@ export class SpinhandSimulation {
     if (gearHit) candidates.push({ targetId: "gear", hit: gearHit });
     candidates.sort((a, b) => a.hit.time - b.hit.time);
 
-    let availableImpulse = WHEEL_TOTAL_IMPULSE;
     for (const candidate of candidates) {
       const radial = sub(candidate.hit.point, candidate.hit.wheelCenter);
       const tangent = clockwiseTangent(radial);
@@ -270,7 +273,7 @@ export class SpinhandSimulation {
         invalidDeep: candidate.hit.invalidDeep,
       };
 
-      if (candidate.hit.invalidDeep || availableImpulse <= 0) {
+      if (candidate.hit.invalidDeep || frameBudget.available <= 0) {
         this.contacts.push(feedback);
         continue;
       }
@@ -282,9 +285,8 @@ export class SpinhandSimulation {
       const requested = calculateTangentialImpulse({ tangent, contactVelocity, effectiveMass, dt });
       const budget = this.budgets.get(candidate.targetId);
       if (!budget) continue;
-      const impulse = Math.min(requested, availableImpulse, budget.tokens);
+      const impulse = frameBudget.take(Math.min(requested, budget.tokens));
       budget.tokens -= impulse;
-      availableImpulse -= impulse;
       feedback.impulse = impulse;
 
       if (impulse > 0) {
@@ -360,5 +362,45 @@ export class SpinhandSimulation {
     for (const budget of this.budgets.values()) {
       budget.tokens = Math.min(WHEEL_TOKEN_CAPACITY, budget.tokens + WHEEL_TOKEN_REFILL * dt);
     }
+  }
+
+  private resolveWheelPlacement(target: Vec2): Vec2 {
+    let resolved = { ...target };
+    for (let pass = 0; pass < 3; pass += 1) {
+      for (const platform of SANDBOX_PLATFORMS) {
+        if (platform.blocksWheel === false) continue;
+        const sample = sampleShape(
+          resolved,
+          { kind: "box", halfExtents: platform.halfExtents },
+          { position: platform.position, rotation: platform.rotation },
+        );
+        const clearance = WHEEL_RADIUS + 0.015;
+        if (sample.signedDistance < clearance) {
+          resolved = add(resolved, scale(sample.normal, clearance - sample.signedDistance));
+        }
+      }
+    }
+    return resolved;
+  }
+
+  private constrainWheelSweep(start: Vec2, end: Vec2): Vec2 {
+    const sweepDistance = distance(start, end);
+    if (sweepDistance < 1e-6) return { ...end };
+    let earliest = 1;
+    for (const platform of SANDBOX_PLATFORMS) {
+      if (platform.blocksWheel === false) continue;
+      const shape = { kind: "box", halfExtents: platform.halfExtents } as const;
+      const transform = { position: platform.position, rotation: platform.rotation };
+      const startDistance = sampleShape(start, shape, transform).signedDistance;
+      const endDistance = sampleShape(end, shape, transform).signedDistance;
+      if (startDistance <= WHEEL_RADIUS + 0.015) {
+        if (endDistance < startDistance - 1e-4) earliest = 0;
+        continue;
+      }
+      const hit = sweepWheelAgainstShape(start, end, WHEEL_RADIUS, 0, shape, transform);
+      if (hit) earliest = Math.min(earliest, hit.time);
+    }
+    if (earliest >= 1) return { ...end };
+    return lerp(start, end, Math.max(0, earliest - 0.02 / sweepDistance));
   }
 }

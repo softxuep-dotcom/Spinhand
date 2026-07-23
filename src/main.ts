@@ -101,7 +101,7 @@ const updateLevelHud = (): void => {
   objectiveVerb.textContent = level.verb;
   objectiveName.textContent = level.name;
   hintCopy.textContent = currentLevel === 1
-    ? "黄轮贴住球底 · 缓慢向右推到杯中"
+    ? "黄轮贴住齿条下沿 · 向右拨入卡槽"
     : `按住拖动 · ${level.hint}`;
   inputHint.classList.remove("is-hidden");
   firstLevelDemo.classList.toggle("is-hidden", currentLevel !== 1);
@@ -212,7 +212,9 @@ const updateHud = (): void => {
     debugMetrics.textContent = `L${currentLevel} · J ${impulse.toFixed(3)} · ${stats.calls} calls / ${stats.triangles} tris`;
     debugState.textContent = state.object
       ? `p ${state.object.position.x.toFixed(2)}, ${state.object.position.y.toFixed(2)} · v ${state.object.linearVelocity.x.toFixed(2)}, ${state.object.linearVelocity.y.toFixed(2)} · ω ${state.object.angularVelocity.toFixed(2)}`
-      : `机构 y ${state.mechanism?.position.y.toFixed(2) ?? "—"} · 进度 ${Math.round((state.mechanism?.progress ?? 0) * 100)}%`;
+      : `机构 ${state.mechanism?.axis ?? "y"} ${state.mechanism
+          ? state.mechanism.position[state.mechanism.axis].toFixed(2)
+          : "—"} · 进度 ${Math.round((state.mechanism?.progress ?? 0) * 100)}%`;
   }
   audio.update(state.wheel.active && !paused, impulse, Boolean(contact?.invalidDeep));
   if (state.completed) handleCompletion();

@@ -98,7 +98,11 @@ export class CampaignRenderer {
     this.hiddenBolt = this.createHiddenBolt(state.level.accent);
     if (state.level.phaseCheckpoint) {
       this.checkpoint = this.createCheckpoint();
-      this.checkpoint.position.set(state.level.phaseCheckpoint.x, state.level.phaseCheckpoint.y, 0.2);
+      this.checkpoint.position.set(
+        state.level.phaseCheckpoint.position.x,
+        state.level.phaseCheckpoint.position.y,
+        0.2,
+      );
       this.content.add(this.checkpoint);
     }
     if (state.object) this.object = state.object.kind === "ball" ? this.createBall(state.level.accent) : this.createBox();
@@ -221,12 +225,21 @@ export class CampaignRenderer {
       roughness: 0.12,
       metalness: 0.78,
     });
+    const guideMaterial = new THREE.MeshStandardMaterial({
+      color: 0x466779,
+      emissive: 0x143e50,
+      emissiveIntensity: 0.28,
+      roughness: 0.42,
+      metalness: 0.5,
+      transparent: true,
+      opacity: 0.58,
+    });
     const edge = new THREE.MeshStandardMaterial({ color: state.level.accent, emissive: state.level.accent, emissiveIntensity: 0.22, roughness: 0.38 });
     for (const platform of state.platforms) {
       const group = new THREE.Group();
       const body = new THREE.Mesh(
         new THREE.BoxGeometry(platform.halfExtents.x * 2, platform.halfExtents.y * 2, 0.7),
-        platform.surface === "slick" ? slickMaterial : material,
+        platform.surface === "slick" ? slickMaterial : platform.surface === "guide" ? guideMaterial : material,
       );
       body.castShadow = true;
       body.receiveShadow = true;
@@ -239,6 +252,15 @@ export class CampaignRenderer {
           emissive: 0x1a8aa8,
           emissiveIntensity: 0.85,
           roughness: 0.16,
+        });
+      } else if (platform.surface === "guide") {
+        body.scale.z = 0.46;
+        lip.material = new THREE.MeshStandardMaterial({
+          color: state.level.accent,
+          emissive: state.level.accent,
+          emissiveIntensity: 0.38,
+          transparent: true,
+          opacity: 0.72,
         });
       }
       group.add(body, lip);
@@ -308,6 +330,19 @@ export class CampaignRenderer {
     const material = new THREE.MeshStandardMaterial({ color: state.level.accent, roughness: 0.3, metalness: 0.68 });
     const body = new THREE.Mesh(new THREE.BoxGeometry(mechanism.halfExtents.x * 2, mechanism.halfExtents.y * 2, 0.78), material);
     body.castShadow = true;
+    if (mechanism.kind === "rack") {
+      group.add(body);
+      const toothMaterial = new THREE.MeshStandardMaterial({ color: 0xdde4f2, roughness: 0.28, metalness: 0.72 });
+      for (let index = -3; index <= 3; index += 1) {
+        const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.82), toothMaterial);
+        tooth.position.set(index * 0.24, -mechanism.halfExtents.y - 0.08, 0);
+        group.add(tooth);
+      }
+      const nose = new THREE.Mesh(new THREE.BoxGeometry(0.18, mechanism.halfExtents.y * 2.3, 0.86), toothMaterial);
+      nose.position.x = mechanism.halfExtents.x - 0.05;
+      group.add(nose);
+      return group;
+    }
     const cap = new THREE.Mesh(
       new THREE.BoxGeometry(mechanism.halfExtents.x * 2.5, 0.18, 0.88),
       new THREE.MeshStandardMaterial({ color: 0xdde4f2, roughness: 0.24, metalness: 0.75 }),
