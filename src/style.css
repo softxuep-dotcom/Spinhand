@@ -413,7 +413,20 @@ button { -webkit-tap-highlight-color: transparent; }
   font-size: 24px;
 }
 
-.level-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
+.chapter-tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: -7px 0 12px; }
+.chapter-tab {
+  min-height: 32px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+  background: rgba(255,255,255,.045);
+  color: #aeb6c9;
+  font-size: 11px;
+  font-weight: 820;
+  cursor: pointer;
+}
+.chapter-tab[data-active="true"] { border-color: rgba(255,212,90,.55); background: rgba(255,212,90,.12); color: var(--gold); }
+.chapter-tab:disabled { opacity: .25; cursor: default; }
+.level-grid { display: grid; grid-template-columns: repeat(2, 1fr); max-height: min(46vh, 360px); gap: 9px; overflow-y: auto; scrollbar-width: thin; }
 .level-button {
   display: grid;
   grid-template-columns: 31px 1fr;

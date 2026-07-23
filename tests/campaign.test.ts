@@ -1,7 +1,13 @@
 import RAPIER from "@dimforge/rapier2d-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CampaignSimulation } from "../src/game/campaign/CampaignSimulation";
-import { getCampaignLevel, type CampaignLevel } from "../src/game/campaign/levels";
+import {
+  CAMPAIGN_CHAPTERS,
+  CAMPAIGN_LEVELS,
+  TOTAL_LEVELS,
+  getCampaignLevel,
+  type CampaignLevel,
+} from "../src/game/campaign/levels";
 import { CAMPAIGN_WHEEL_TOTAL_IMPULSE, FIXED_DT, WHEEL_RADIUS } from "../src/game/config";
 
 const idle = (simulation: CampaignSimulation, frames = 45): void => {
@@ -35,6 +41,7 @@ beforeAll(async () => RAPIER.init());
 
 const makeBallLevel = (platforms: CampaignLevel["platforms"] = []): CampaignLevel => ({
   id: 99,
+  chapter: 1,
   name: "test",
   verb: "test",
   hint: "test",
@@ -252,6 +259,104 @@ describe("chapter one campaign", () => {
       object = simulation.getRenderState().object!;
       simulation.step({ active: true, justPressed: false, target: { x: object.position.x + 0.18, y: object.position.y + 1.28 } }, FIXED_DT);
     }
+    expect(simulation.getRenderState().completed).toBe(true);
+  });
+});
+
+describe("complete campaign", () => {
+  it("ships six five-level chapters with unique ids and names", () => {
+    expect(CAMPAIGN_CHAPTERS).toHaveLength(6);
+    expect(CAMPAIGN_LEVELS).toHaveLength(TOTAL_LEVELS);
+    expect(new Set(CAMPAIGN_LEVELS.map((level) => level.id)).size).toBe(TOTAL_LEVELS);
+    expect(new Set(CAMPAIGN_LEVELS.map((level) => level.name)).size).toBe(TOTAL_LEVELS);
+    for (const chapter of CAMPAIGN_CHAPTERS) {
+      expect(CAMPAIGN_LEVELS.filter((level) => level.chapter === chapter.id)).toHaveLength(5);
+    }
+  });
+
+  it("boots and advances every campaign level without invalid render state", () => {
+    for (const level of CAMPAIGN_LEVELS) {
+      const simulation = new CampaignSimulation(level);
+      idle(simulation, 4);
+      const state = simulation.getRenderState();
+      expect(state.level.id).toBe(level.id);
+      expect(Number.isFinite(state.wheel.position.x)).toBe(true);
+      expect(Number.isFinite(state.wheel.position.y)).toBe(true);
+      expect(Number.isFinite(state.goal.position.x)).toBe(true);
+      expect(Number.isFinite(state.goal.position.y)).toBe(true);
+    }
+  });
+
+  it("drives a constrained rotor to completion through rim contact", () => {
+    const simulation = new CampaignSimulation(getCampaignLevel(11));
+    let mechanism = simulation.getRenderState().mechanism!;
+    const target = {
+      x: mechanism.position.x,
+      y: mechanism.position.y - mechanism.radius - WHEEL_RADIUS,
+    };
+    simulation.step({ active: true, justPressed: true, target }, FIXED_DT);
+    for (let index = 0; index < 720 && !simulation.getRenderState().completed; index += 1) {
+      mechanism = simulation.getRenderState().mechanism!;
+      simulation.step({ active: true, justPressed: false, target }, FIXED_DT);
+    }
+    const state = simulation.getRenderState();
+    expect(state.mechanism!.rotation).toBeGreaterThan(0.5);
+    expect(state.mechanism!.progress).toBe(1);
+    expect(state.completed).toBe(true);
+  });
+
+  it("opens the second phase of a machine-then-object level", () => {
+    const simulation = new CampaignSimulation(getCampaignLevel(12));
+    const mechanism = simulation.getRenderState().mechanism!;
+    const target = {
+      x: mechanism.position.x,
+      y: mechanism.position.y - mechanism.radius - WHEEL_RADIUS,
+    };
+    simulation.step({ active: true, justPressed: true, target }, FIXED_DT);
+    for (let index = 0; index < 720 && simulation.getRenderState().phase === 0; index += 1) {
+      simulation.step({ active: true, justPressed: false, target }, FIXED_DT);
+    }
+    const state = simulation.getRenderState();
+    expect(state.phase).toBe(1);
+    expect(state.goal.active).toBe(true);
+    expect(state.completed).toBe(false);
+  });
+
+  it("breaks glass after sustained stress while allowing a short tap", () => {
+    const simulation = new CampaignSimulation(getCampaignLevel(9));
+    const object = simulation.getRenderState().object!;
+    const target = { x: object.position.x, y: object.position.y + 0.5 + WHEEL_RADIUS };
+    simulation.step({ active: true, justPressed: true, target }, FIXED_DT);
+    simulation.step({ active: true, justPressed: false, target }, FIXED_DT);
+    expect(simulation.getRenderState().failed).toBe(false);
+    for (let index = 0; index < 60 && !simulation.getRenderState().failed; index += 1) {
+      const glass = simulation.getRenderState().object!;
+      simulation.step({
+        active: true,
+        justPressed: false,
+        target: { x: glass.position.x, y: glass.position.y + 0.5 + WHEEL_RADIUS },
+      }, FIXED_DT);
+    }
+    expect(simulation.getRenderState().failed).toBe(true);
+  });
+
+  it("moves the level 20 basket from simulation time, not render mutation", () => {
+    const simulation = new CampaignSimulation(getCampaignLevel(20));
+    const before = simulation.getRenderState().goal.position.x;
+    idle(simulation, 24);
+    const after = simulation.getRenderState().goal.position.x;
+    expect(Math.abs(after - before)).toBeGreaterThan(0.3);
+  });
+
+  it("treats a dock as a floor contact target for the cart", () => {
+    const source = getCampaignLevel(10);
+    const level: CampaignLevel = {
+      ...source,
+      id: 100,
+      object: { ...source.object!, start: { x: source.goal.position.x, y: -2 } },
+    };
+    const simulation = new CampaignSimulation(level);
+    idle(simulation, 90);
     expect(simulation.getRenderState().completed).toBe(true);
   });
 });

@@ -8,12 +8,23 @@ export interface CampaignRenderState {
   object?: BodyRenderState & { kind: LevelObjectKind };
   mechanism?: {
     kind: MechanismKind;
+    response: "slider" | "rotor";
     axis: "x" | "y";
     position: Vec2;
     halfExtents: Vec2;
+    radius: number;
+    rotation: number;
+    angularVelocity: number;
     progress: number;
   };
-  goal: { kind: GoalKind; position: Vec2; halfExtents: Vec2; progress: number };
+  goal: {
+    kind: GoalKind;
+    position: Vec2;
+    halfExtents: Vec2;
+    entry?: "left" | "right" | "top" | "bottom";
+    progress: number;
+    active: boolean;
+  };
   contacts: readonly ContactFeedback[];
   platforms: readonly PlatformState[];
   hiddenBolt: { position: Vec2; collected: boolean };

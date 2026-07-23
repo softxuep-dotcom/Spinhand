@@ -12,7 +12,7 @@ import { calculateTangentialImpulse } from "../simulation/contactMath";
 import { FrameImpulseBudget } from "../simulation/FrameImpulseBudget";
 import { sampleShape, sweepWheelAgainstShape, type ContactShape } from "../simulation/sweep";
 import type { BodyRenderState, ContactFeedback } from "../simulation/types";
-import type { CampaignLevel } from "./levels";
+import { isRoundObject, type CampaignLevel } from "./levels";
 import type { CampaignRenderState } from "./types";
 
 const readBody = (body: RAPIER.RigidBody): BodyRenderState => {
@@ -37,6 +37,10 @@ export class CampaignSimulation {
   private hadContact = false;
   private mechanismPosition = 0;
   private mechanismVelocity = 0;
+  private mechanismTravel = 0;
+  private elapsed = 0;
+  private mechanismEffectApplied = false;
+  private fragileStress = 0;
   private goalHold = 0;
   private phase = 0;
   private hiddenBoltCollected = false;
@@ -49,13 +53,18 @@ export class CampaignSimulation {
     if (level.wheelStart) {
       this.wheelPosition = { ...level.wheelStart };
     } else if (object) {
-      const extent = object.kind === "ball" ? object.radius ?? 0.56 : object.halfExtents?.y ?? 0.64;
+      const extent = isRoundObject(object.kind) ? object.radius ?? 0.56 : object.halfExtents?.y ?? 0.64;
       this.wheelPosition = {
         x: object.start.x - 0.18,
         y: object.start.y - extent - WHEEL_RADIUS,
       };
     } else if (mechanism) {
-      if (mechanism.axis === "x") {
+      if (mechanism.response === "rotor") {
+        this.wheelPosition = {
+          x: mechanism.start.x,
+          y: mechanism.start.y - (mechanism.radius ?? mechanism.halfExtents.x) - WHEEL_RADIUS,
+        };
+      } else if (mechanism.axis === "x") {
         this.wheelPosition = {
           x: mechanism.start.x,
           y: mechanism.start.y - mechanism.halfExtents.y - WHEEL_RADIUS,
@@ -92,11 +101,11 @@ export class CampaignSimulation {
       this.objectBody = this.world.createRigidBody(
         RAPIER.RigidBodyDesc.dynamic()
           .setTranslation(level.object.start.x, level.object.start.y)
-          .setLinearDamping(level.object.linearDamping ?? (level.object.kind === "box" ? 0.55 : 0.2))
-          .setAngularDamping(level.object.angularDamping ?? (level.object.kind === "box" ? 2.4 : 0.12))
+          .setLinearDamping(level.object.linearDamping ?? (isRoundObject(level.object.kind) ? 0.2 : 0.55))
+          .setAngularDamping(level.object.angularDamping ?? (isRoundObject(level.object.kind) ? 0.12 : 2.4))
           .setCcdEnabled(true),
       );
-      if (level.object.kind === "ball") {
+      if (isRoundObject(level.object.kind)) {
         const radius = level.object.radius ?? 0.56;
         this.objectShape = { kind: "circle", radius };
         this.world.createCollider(
@@ -112,19 +121,21 @@ export class CampaignSimulation {
         this.world.createCollider(
           RAPIER.ColliderDesc.cuboid(halfExtents.x, halfExtents.y)
             .setDensity(level.object.density ?? 1.2)
-            .setFriction(0.5)
+            .setFriction(level.object.friction ?? 0.5)
             .setRestitution(0.06),
           this.objectBody,
         );
       }
     }
     this.mechanismPosition = level.mechanism
-      ? level.mechanism.start[level.mechanism.axis]
+      ? level.mechanism.response === "rotor" ? 0 : level.mechanism.start[level.mechanism.axis]
       : 0;
   }
 
   step(control: ControlSample, dt = FIXED_DT): void {
     if (this.completed || this.failed) return;
+    this.elapsed += dt;
+    this.fragileStress *= Math.exp(-7 * dt);
     this.contacts = [];
     this.previousWheelPosition = { ...this.wheelPosition };
 
@@ -173,13 +184,16 @@ export class CampaignSimulation {
     const mechanismRange = mechanism ? mechanism.maximum - mechanism.minimum : 1;
     const progress = mechanism
       ? clamp(
-          mechanism.kind === "plunger"
-            ? (mechanism.maximum - this.mechanismPosition) / mechanismRange
-            : (this.mechanismPosition - mechanism.minimum) / mechanismRange,
+          mechanism.response === "rotor"
+            ? this.mechanismTravel / Math.max(0.001, mechanism.target)
+            : mechanism.kind === "plunger"
+              ? (mechanism.maximum - this.mechanismPosition) / mechanismRange
+              : (this.mechanismPosition - mechanism.minimum) / mechanismRange,
           0,
           1,
         )
       : 0;
+    const goalPosition = this.currentGoalPosition;
     return {
       level: this.level,
       wheel: {
@@ -193,17 +207,25 @@ export class CampaignSimulation {
       mechanism: mechanism
         ? {
             kind: mechanism.kind,
+            response: mechanism.response ?? "slider",
             axis: mechanism.axis,
-            position: mechanism.axis === "x"
-              ? { x: this.mechanismPosition, y: mechanism.start.y }
-              : { x: mechanism.start.x, y: this.mechanismPosition },
+            position: mechanism.response === "rotor"
+              ? { ...mechanism.start }
+              : mechanism.axis === "x"
+                ? { x: this.mechanismPosition, y: mechanism.start.y }
+                : { x: mechanism.start.x, y: this.mechanismPosition },
             halfExtents: mechanism.halfExtents,
+            radius: mechanism.radius ?? mechanism.halfExtents.x,
+            rotation: mechanism.response === "rotor" ? this.mechanismPosition : 0,
+            angularVelocity: mechanism.response === "rotor" ? this.mechanismVelocity : 0,
             progress,
           }
         : undefined,
       goal: {
         ...this.level.goal,
+        position: goalPosition,
         progress: clamp(this.goalHold / this.goalHoldRequired, 0, 1),
+        active: this.phase >= Number(Boolean(this.level.mechanismThenObject)) + Number(Boolean(this.level.phaseCheckpoint)),
       },
       contacts: this.contacts,
       platforms: this.level.platforms,
@@ -251,6 +273,10 @@ export class CampaignSimulation {
           if (impulse > 0) {
             this.objectBody.applyImpulseAtPoint(scale(tangent, impulse), hit.point, true);
             feedback.impulse = impulse;
+            this.fragileStress += impulse;
+            if (this.level.object.breakStress !== undefined && this.fragileStress > this.level.object.breakStress) {
+              this.failed = true;
+            }
           }
         }
         this.contacts.push(feedback);
@@ -259,15 +285,19 @@ export class CampaignSimulation {
 
     const mechanism = this.level.mechanism;
     if (mechanism && frameBudget.available > 0) {
-      const mechanismPosition = mechanism.axis === "x"
-        ? { x: this.mechanismPosition, y: mechanism.start.y }
-        : { x: mechanism.start.x, y: this.mechanismPosition };
+      const rotor = mechanism.response === "rotor";
+      const mechanismPosition = rotor
+        ? mechanism.start
+        : mechanism.axis === "x"
+          ? { x: this.mechanismPosition, y: mechanism.start.y }
+          : { x: mechanism.start.x, y: this.mechanismPosition };
+      const radius = mechanism.radius ?? mechanism.halfExtents.x;
       const hit = sweepWheelAgainstShape(
         start,
         end,
         WHEEL_RADIUS,
         WHEEL_RIM_WIDTH,
-        { kind: "box", halfExtents: mechanism.halfExtents },
+        rotor ? { kind: "circle", radius } : { kind: "box", halfExtents: mechanism.halfExtents },
         { position: mechanismPosition, rotation: 0 },
       );
       if (hit) {
@@ -281,10 +311,13 @@ export class CampaignSimulation {
           invalidDeep: hit.invalidDeep,
         };
         if (!hit.invalidDeep) {
+          const relative = sub(hit.point, mechanismPosition);
           const axisTangent = mechanism.axis === "x" ? tangent.x : tangent.y;
-          const contactVelocity = mechanism.axis === "x"
-            ? { x: this.mechanismVelocity, y: 0 }
-            : { x: 0, y: this.mechanismVelocity };
+          const contactVelocity = rotor
+            ? { x: -this.mechanismVelocity * relative.y, y: this.mechanismVelocity * relative.x }
+            : mechanism.axis === "x"
+              ? { x: this.mechanismVelocity, y: 0 }
+              : { x: 0, y: this.mechanismVelocity };
           const impulse = frameBudget.take(
             calculateTangentialImpulse({
               tangent,
@@ -296,7 +329,13 @@ export class CampaignSimulation {
               maximum: 0.48,
             }),
           );
-          this.mechanismVelocity += (axisTangent * impulse) / 1.6;
+          if (rotor) {
+            const force = scale(tangent, impulse);
+            const torqueImpulse = relative.x * force.y - relative.y * force.x;
+            this.mechanismVelocity += torqueImpulse / Math.max(0.65, radius * radius * 1.7);
+          } else {
+            this.mechanismVelocity += (axisTangent * impulse) / 1.6;
+          }
           feedback.impulse = impulse;
         }
         this.contacts.push(feedback);
@@ -322,6 +361,13 @@ export class CampaignSimulation {
   private stepMechanism(dt: number): void {
     const mechanism = this.level.mechanism;
     if (!mechanism) return;
+    if (mechanism.response === "rotor") {
+      this.mechanismVelocity *= Math.exp(-1.75 * dt);
+      const delta = this.mechanismVelocity * dt;
+      this.mechanismPosition += delta;
+      this.mechanismTravel += Math.abs(delta);
+      return;
+    }
     this.mechanismVelocity *= Math.exp(-2.8 * dt);
     this.mechanismPosition = clamp(
       this.mechanismPosition + this.mechanismVelocity * dt,
@@ -335,31 +381,41 @@ export class CampaignSimulation {
 
   private evaluateState(dt: number): void {
     let inGoal = false;
-    if (this.level.mechanism) {
-      inGoal = this.level.mechanism.kind === "plunger"
-        ? this.mechanismPosition <= this.level.mechanism.target
-        : this.mechanismPosition >= this.level.mechanism.target;
-    } else if (this.objectBody) {
+    const mechanismReady = this.mechanismComplete;
+    if (this.level.mechanismThenObject && this.level.mechanism && this.phase === 0 && mechanismReady) {
+      this.phase = 1;
+      if (!this.mechanismEffectApplied && this.objectBody && this.level.mechanism.effectImpulse) {
+        this.objectBody.applyImpulse(this.level.mechanism.effectImpulse, true);
+        this.mechanismEffectApplied = true;
+      }
+    }
+    if (this.level.mechanism && !this.level.mechanismThenObject) {
+      inGoal = mechanismReady;
+    } else if (this.objectBody && (!this.level.mechanismThenObject || this.phase > 0)) {
       const body = readBody(this.objectBody);
-      if (this.level.phaseCheckpoint && this.phase === 0) {
+      const checkpointPhase = this.level.mechanismThenObject ? 1 : 0;
+      if (this.level.phaseCheckpoint && this.phase === checkpointPhase) {
         const checkpoint = this.level.phaseCheckpoint;
         if (
           Math.abs(body.position.x - checkpoint.position.x) <= checkpoint.halfExtents.x
           && Math.abs(body.position.y - checkpoint.position.y) <= checkpoint.halfExtents.y
         ) {
-          this.phase = 1;
+          this.phase = checkpointPhase + 1;
         }
       }
-      const goal = this.level.goal;
-      const verticalExtent = this.level.object?.kind === "box"
+      const goal = { ...this.level.goal, position: this.currentGoalPosition };
+      const verticalExtent = this.level.object && !isRoundObject(this.level.object.kind)
         ? this.level.object.halfExtents?.y ?? 0.64
         : this.level.object?.radius ?? 0.56;
-      const inside = goal.kind === "plate"
+      const inside = goal.kind === "plate" || goal.kind === "dock"
         ? Math.abs(body.position.x - goal.position.x) <= goal.halfExtents.x
           && Math.abs((body.position.y - verticalExtent) - goal.position.y) <= 0.34
         : Math.abs(body.position.x - goal.position.x) <= goal.halfExtents.x
           && Math.abs(body.position.y - goal.position.y) <= goal.halfExtents.y;
-      inGoal = inside && (!this.level.phaseCheckpoint || this.phase === 1);
+      const speed = Math.hypot(body.linearVelocity.x, body.linearVelocity.y);
+      const speedOkay = speed <= (this.level.object?.goalMaxSpeed ?? Number.POSITIVE_INFINITY);
+      const goalPhase = Number(Boolean(this.level.mechanismThenObject)) + Number(Boolean(this.level.phaseCheckpoint));
+      inGoal = inside && speedOkay && this.phase >= goalPhase;
       if (body.position.y < -7.3 || Math.abs(body.position.x) > 5.2) this.failed = true;
     }
     this.goalHold = inGoal ? this.goalHold + dt : 0;
@@ -368,6 +424,24 @@ export class CampaignSimulation {
 
   private get goalHoldRequired(): number {
     return 0.25;
+  }
+
+  private get mechanismComplete(): boolean {
+    const mechanism = this.level.mechanism;
+    if (!mechanism) return false;
+    if (mechanism.response === "rotor") return this.mechanismTravel >= mechanism.target;
+    return mechanism.kind === "plunger"
+      ? this.mechanismPosition <= mechanism.target
+      : this.mechanismPosition >= mechanism.target;
+  }
+
+  private get currentGoalPosition(): Vec2 {
+    const { goal } = this.level;
+    if (!goal.motion) return { ...goal.position };
+    const offset = Math.sin(this.elapsed * goal.motion.speed * Math.PI * 2 + (goal.motion.phase ?? 0)) * goal.motion.amplitude;
+    return goal.motion.axis === "x"
+      ? { x: goal.position.x + offset, y: goal.position.y }
+      : { x: goal.position.x, y: goal.position.y + offset };
   }
 
   private resolveWheelPlacement(target: Vec2): Vec2 {

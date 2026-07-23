@@ -10,7 +10,7 @@
   <body>
     <main id="app" aria-label="Spinhand 动力轮">
       <div id="game-shell">
-        <canvas id="game-canvas" aria-label="动力轮第一章游戏区域"></canvas>
+        <canvas id="game-canvas" aria-label="动力轮六章战役游戏区域"></canvas>
 
         <div id="hud" aria-live="polite">
           <div class="top-row">
@@ -72,27 +72,29 @@
           </div>
         </section>
 
-        <section id="levels-panel" class="overlay" aria-label="第一章关卡" hidden>
+        <section id="levels-panel" class="overlay" aria-label="战役关卡" hidden>
           <div class="panel-card">
             <button id="levels-close-button" class="close-button" type="button" aria-label="关闭关卡列表">×</button>
-            <span class="eyebrow">第一章</span>
-            <h2>认识轮缘</h2>
-            <p class="panel-copy">接触哪一侧，就决定力量去向。</p>
+            <span id="levels-chapter-label" class="eyebrow">第一章</span>
+            <h2 id="levels-chapter-name">认识轮缘</h2>
+            <p id="levels-chapter-copy" class="panel-copy">接触哪一侧，就决定力量去向。</p>
+            <div id="chapter-tabs" class="chapter-tabs" aria-label="章节"></div>
             <div id="level-grid" class="level-grid"></div>
           </div>
         </section>
 
-        <section id="chapter-panel" class="overlay chapter-panel" aria-label="第一章完成" hidden>
+        <section id="chapter-panel" class="overlay chapter-panel" aria-label="章节完成" hidden>
           <div class="panel-card chapter-card">
             <div class="chapter-emblem" aria-hidden="true"><span></span></div>
             <span class="eyebrow">章节完成</span>
-            <h1>认识轮缘</h1>
-            <p>你已经让同一只顺时针动力轮完成了推、扫、抬、压与换向。</p>
+            <h1 id="chapter-complete-name">认识轮缘</h1>
+            <p id="chapter-complete-copy">你已经让同一只顺时针动力轮完成了推、扫、抬、压与换向。</p>
             <div class="chapter-reward">
               <div><strong id="total-bolts">0 / 15</strong><span>工坊螺栓</span></div>
-              <div><strong>已解锁</strong><span>黄铜轮皮 · 玩具台</span></div>
+              <div><strong>已解锁</strong><span id="chapter-reward-name">黄铜轮皮 · 玩具台</span></div>
             </div>
-            <button id="replay-chapter-button" class="primary-button" type="button">重玩第一章</button>
+            <button id="next-chapter-button" class="primary-button" type="button">进入下一章</button>
+            <button id="replay-chapter-button" class="text-button" type="button">重玩本章</button>
             <button id="chapter-levels-button" class="text-button" type="button">选择关卡</button>
           </div>
         </section>

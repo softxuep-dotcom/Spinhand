@@ -1,6 +1,8 @@
 import type { Vec2 } from "../math/vec2";
 
-export type TargetId = "ball" | "box" | "gear" | "rack" | "bolt" | "plunger";
+export type TargetId =
+  | "ball" | "box" | "foam" | "glass" | "disc" | "cart" | "package" | "doll"
+  | "gear" | "pulley" | "winch" | "valve" | "rack" | "bolt" | "plunger";
 
 export interface BodyRenderState {
   position: Vec2;

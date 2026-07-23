@@ -1,4 +1,5 @@
 import type { LevelResult } from "./types";
+import { TOTAL_LEVELS } from "./levels";
 
 export interface CampaignSettings {
   sound: boolean;
@@ -55,7 +56,7 @@ export class CampaignSave {
       noRestart: Boolean(previous?.noRestart || result.noRestart),
       hiddenBolt: Boolean(previous?.hiddenBolt || result.hiddenBolt),
     };
-    this.data.highestUnlocked = Math.max(this.data.highestUnlocked, Math.min(5, result.level + 1));
+    this.data.highestUnlocked = Math.max(this.data.highestUnlocked, Math.min(TOTAL_LEVELS, result.level + 1));
     if (result.level >= 5) this.data.workshopUnlocked = true;
     this.persist();
   }
@@ -71,8 +72,9 @@ export class CampaignSave {
     return 1 + Number(result.noRestart) + Number(result.hiddenBolt);
   }
 
-  totalBolts(): number {
-    return Array.from({ length: 5 }, (_, index) => this.boltsFor(index + 1)).reduce((sum, value) => sum + value, 0);
+  totalBolts(start = 1, end = TOTAL_LEVELS): number {
+    return Array.from({ length: Math.max(0, end - start + 1) }, (_, index) => this.boltsFor(start + index))
+      .reduce((sum, value) => sum + value, 0);
   }
 
   private persist(): void {
